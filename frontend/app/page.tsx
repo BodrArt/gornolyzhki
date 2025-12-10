@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 
 type City = {
@@ -11,6 +12,7 @@ type City = {
 
 type ResortView = {
   id: number;
+  slug: string;
   name: string;
   region: string | null;
   carDistanceKm: number | null;
@@ -36,7 +38,7 @@ export default function HomePage() {
   const [errorText, setErrorText] = useState<string | null>(null);
 
   // фильтры
-  const [maxHours, setMaxHours] = useState<number>(12); // по умолчанию 12, но можно двигать до 30
+  const [maxHours, setMaxHours] = useState<number>(12); // по умолчанию 12, можно до 30
   const [onlyComfort, setOnlyComfort] = useState<boolean>(false);
   const [excludeDraglift, setExcludeDraglift] = useState<boolean>(false);
   const [kidsOnly, setKidsOnly] = useState<boolean>(false);
@@ -92,6 +94,7 @@ export default function HomePage() {
             notes,
             resorts (
               id,
+              slug,
               name,
               region,
               runs_count,
@@ -115,6 +118,7 @@ export default function HomePage() {
               const r = row.resorts;
               return {
                 id: r.id,
+                slug: r.slug,
                 name: r.name,
                 region: r.region,
                 carDistanceKm: row.car_distance_km,
@@ -267,7 +271,7 @@ export default function HomePage() {
               <input
                 type="range"
                 min={1}
-                max={30} // было 12, теперь до 30 часов
+                max={30}
                 step={1}
                 value={maxHours}
                 onChange={(e) => setMaxHours(Number(e.target.value))}
@@ -422,7 +426,14 @@ export default function HomePage() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>
+                      <Link
+                        href={`/resort/${r.slug}`}
+                        style={{ color: '#2563eb', textDecoration: 'none' }}
+                      >
+                        {r.name}
+                      </Link>
+                    </div>
                     <div style={{ fontSize: 13, color: '#6b7280' }}>
                       {r.region || 'Регион не указан'}
                     </div>
