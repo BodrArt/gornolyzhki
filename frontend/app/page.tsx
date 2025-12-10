@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
+type City = {
+  id: number;
+  name: string;
+  slug: string;
+};
+
 type ResortView = {
   id: number;
   name: string;
@@ -22,11 +28,15 @@ type ResortView = {
 };
 
 export default function HomePage() {
+  const [cities, setCities] = useState<City[]>([]);
+  const [selectedCitySlug, setSelectedCitySlug] = useState<string>('moscow');
+
   const [resorts, setResorts] = useState<ResortView[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
 
-  const [maxHours, setMaxHours] = useState<number>(3);
+  // фильтры
+  const [maxHours, setMaxHours] = useState<number>(6);
   const [onlyComfort, setOnlyComfort] = useState<boolean>(false);
   const [excludeDraglift, setExcludeDraglift] = useState<boolean>(false);
   const [kidsOnly, setKidsOnly] = useState<boolean>(false);
@@ -34,24 +44,44 @@ export default function HomePage() {
   const [minRunLength, setMinRunLength] = useState<number>(0);
   const [minVerticalDrop, setMinVerticalDrop] = useState<number>(0);
 
+  // 1) Загружаем список городов
+  useEffect(() => {
+    async function loadCities() {
+      const { data, error } = await supabase
+        .from('cities')
+        .select('id, name, slug')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error(error);
+        setErrorText('Не удалось загрузить список городов');
+      } else {
+        setCities(data || []);
+      }
+    }
+
+    loadCities();
+  }, []);
+
+  // 2) Загружаем курорты при смене города
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       setErrorText(null);
 
       try {
-        const { data: cities, error: cityError } = await supabase
+        const { data: citiesData, error: cityError } = await supabase
           .from('cities')
           .select('id')
-          .eq('slug', 'moscow')
+          .eq('slug', selectedCitySlug)
           .limit(1);
 
         if (cityError) throw cityError;
-        if (!cities || cities.length === 0) {
-          throw new Error('Не найдена Москва в таблице cities (slug=moscow)');
+        if (!citiesData || citiesData.length === 0) {
+          throw new Error(`Не найден город со slug=${selectedCitySlug}`);
         }
 
-        const moscowId = cities[0].id;
+        const cityId = citiesData[0].id;
 
         const { data, error } = await supabase
           .from('travel_profiles')
@@ -74,7 +104,7 @@ export default function HomePage() {
               night_skiing
             )
           `)
-          .eq('city_id', moscowId);
+          .eq('city_id', cityId);
 
         if (error) throw error;
 
@@ -106,14 +136,16 @@ export default function HomePage() {
       } catch (e: any) {
         console.error(e);
         setErrorText(e.message ?? 'Ошибка загрузки данных');
+        setResorts([]);
       } finally {
         setLoading(false);
       }
     }
 
     loadData();
-  }, []);
+  }, [selectedCitySlug]);
 
+  // применяем фильтры
   const filtered = resorts.filter((r) => {
     if (r.carHoursMax != null && r.carHoursMax > maxHours) return false;
     if (onlyComfort && !(r.hasChairlift || r.hasGondola)) return false;
@@ -125,62 +157,147 @@ export default function HomePage() {
     return true;
   });
 
+  const currentCity = cities.find((c) => c.slug === selectedCitySlug);
+
   return (
     <main
       style={{
         padding: '24px',
-        maxWidth: '900px',
+        maxWidth: '960px',
         margin: '0 auto',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+        color: '#0f172a', // тёмный текст
+        backgroundColor: '#f9fafb',
+        minHeight: '100vh',
       }}
     >
-      <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>
-        Горнолыжка из Москвы на машине
-      </h1>
-      <p style={{ marginBottom: '20px', color: '#555' }}>
-        Выбираем курорты под Москвой по времени в пути и комфортности катания.
-      </p>
+      <header style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: '28px', marginBottom: 8 }}>
+          Горнолыжка на машине
+        </h1>
+        <p style={{ marginBottom: 0, fontSize: 14, color: '#4b5563' }}>
+          Подбор горнолыжных курортов по времени в пути и характеристикам трасс.
+        </p>
+      </header>
 
+      {/* выбор города */}
       <section
         style={{
-          border: '1px solid #eee',
-          borderRadius: '12px',
-          padding: '16px',
-          marginBottom: '20px',
-          background: '#fafafa',
+          border: '1px solid #d1d5db',
+          borderRadius: 12,
+          padding: '12px 16px',
+          marginBottom: 16,
+          background: '#e5e7eb',
         }}
       >
-        <h2 style={{ fontSize: '18px', marginBottom: '12px' }}>Фильтры</h2>
+        <label
+          style={{
+            fontSize: 14,
+            display: 'block',
+            marginBottom: 6,
+            color: '#111827',
+            fontWeight: 600,
+          }}
+        >
+          Город выезда
+        </label>
+        <select
+          value={selectedCitySlug}
+          onChange={(e) => setSelectedCitySlug(e.target.value)}
+          style={{
+            padding: '8px 10px',
+            borderRadius: 8,
+            border: '1px solid #9ca3af',
+            minWidth: 240,
+            color: '#111827',
+            backgroundColor: '#ffffff',
+            fontSize: 14,
+          }}
+        >
+          {cities.map((c) => (
+            <option key={c.id} value={c.slug}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </section>
+
+      {/* фильтры */}
+      <section
+        style={{
+          border: '1px solid #d1d5db',
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 20,
+          background: '#f3f4f6',
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 18,
+            marginBottom: 12,
+            color: '#111827',
+            fontWeight: 600,
+          }}
+        >
+          Фильтры
+        </h2>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '12px',
-            marginBottom: '12px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gap: 14,
+            marginBottom: 12,
           }}
         >
           <div>
-            <label style={{ fontSize: '14px' }}>
-              Максимум времени в пути (часы):
+            <label
+              style={{
+                fontSize: 14,
+                color: '#111827',
+                fontWeight: 500,
+                display: 'block',
+                marginBottom: 4,
+              }}
+            >
+              Максимум времени в пути (часы)
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="range"
-                min={0.5}
-                max={4}
-                step={0.5}
+                min={1}
+                max={12}
+                step={1}
                 value={maxHours}
                 onChange={(e) => setMaxHours(Number(e.target.value))}
                 style={{ flex: 1 }}
               />
-              <span style={{ width: 40, textAlign: 'right' }}>{maxHours}</span>
+              <span
+                style={{
+                  width: 32,
+                  textAlign: 'right',
+                  fontVariantNumeric: 'tabular-nums',
+                  color: '#111827',
+                  fontWeight: 600,
+                }}
+              >
+                {maxHours}
+              </span>
             </div>
           </div>
 
           <div>
-            <label style={{ fontSize: '14px' }}>
-              Мин. длина трассы (м):
+            <label
+              style={{
+                fontSize: 14,
+                color: '#111827',
+                fontWeight: 500,
+                display: 'block',
+                marginBottom: 4,
+              }}
+            >
+              Мин. длина трассы (м)
             </label>
             <input
               type="number"
@@ -188,13 +305,27 @@ export default function HomePage() {
               step={50}
               value={minRunLength}
               onChange={(e) => setMinRunLength(Number(e.target.value) || 0)}
-              style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd' }}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: 6,
+                border: '1px solid #9ca3af',
+                fontSize: 14,
+              }}
             />
           </div>
 
           <div>
-            <label style={{ fontSize: '14px' }}>
-              Мин. перепад (м):
+            <label
+              style={{
+                fontSize: 14,
+                color: '#111827',
+                fontWeight: 500,
+                display: 'block',
+                marginBottom: 4,
+              }}
+            >
+              Мин. перепад высот (м)
             </label>
             <input
               type="number"
@@ -202,7 +333,13 @@ export default function HomePage() {
               step={10}
               value={minVerticalDrop}
               onChange={(e) => setMinVerticalDrop(Number(e.target.value) || 0)}
-              style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #ddd' }}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: 6,
+                border: '1px solid #9ca3af',
+                fontSize: 14,
+              }}
             />
           </div>
         </div>
@@ -211,58 +348,56 @@ export default function HomePage() {
           style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: '12px',
-            fontSize: '14px',
+            gap: 12,
+            fontSize: 14,
+            color: '#111827',
           }}
         >
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={onlyComfort}
-              onChange={(e) => setOnlyComfort(e.target.checked)}
-            />
-            Только с креслами/кабинками
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={excludeDraglift}
-              onChange={(e) => setExcludeDraglift(e.target.checked)}
-            />
-            Исключить бугели
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={kidsOnly}
-              onChange={(e) => setKidsOnly(e.target.checked)}
-            />
-            Подходит для детей
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={nightOnly}
-              onChange={(e) => setNightOnly(e.target.checked)}
-            />
-            С вечерним катанием
-          </label>
+          <FilterCheckbox
+            label="Только с креслами/кабинками"
+            checked={onlyComfort}
+            onChange={setOnlyComfort}
+          />
+          <FilterCheckbox
+            label="Исключить бугели"
+            checked={excludeDraglift}
+            onChange={setExcludeDraglift}
+          />
+          <FilterCheckbox
+            label="Подходит для детей"
+            checked={kidsOnly}
+            onChange={setKidsOnly}
+          />
+          <FilterCheckbox
+            label="С вечерним катанием"
+            checked={nightOnly}
+            onChange={setNightOnly}
+          />
         </div>
       </section>
 
+      {currentCity && (
+        <p
+          style={{
+            marginBottom: 8,
+            color: '#4b5563',
+            fontSize: 14,
+          }}
+        >
+          Город выезда: <b>{currentCity.name}</b>
+        </p>
+      )}
+
       {loading && <p>Загружаем курорты…</p>}
       {errorText && (
-        <p style={{ color: 'red', marginBottom: '12px' }}>
+        <p style={{ color: '#b91c1c', marginBottom: 12 }}>
           Ошибка: {errorText}
         </p>
       )}
 
       {!loading && !errorText && (
         <>
-          <p style={{ marginBottom: '8px', color: '#555' }}>
+          <p style={{ marginBottom: 8, color: '#4b5563', fontSize: 14 }}>
             Найдено курортов: <b>{filtered.length}</b> из {resorts.length}
           </p>
 
@@ -270,44 +405,42 @@ export default function HomePage() {
             <p>Под выбранные фильтры ничего не нашлось. Попробуй смягчить условия.</p>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
             {filtered.map((r) => (
               <article
                 key={r.id}
                 style={{
-                  borderRadius: '12px',
-                  border: '1px solid #eee',
+                  borderRadius: 12,
+                  border: '1px solid #e5e7eb',
+                  backgroundColor: '#ffffff',
                   padding: '12px 14px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 6,
+                  boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <div style={{ fontWeight: 600 }}>{r.name}</div>
-                    <div style={{ fontSize: 13, color: '#777' }}>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>
                       {r.region || 'Регион не указан'}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', fontSize: 13 }}>
+                  <div style={{ textAlign: 'right', fontSize: 13, color: '#111827' }}>
                     {r.carHoursMin && r.carHoursMax && (
                       <div>
                         🚗 {r.carHoursMin}–{r.carHoursMax} ч
                       </div>
                     )}
-                    {r.carDistanceKm && (
-                      <div>{r.carDistanceKm} км от Москвы</div>
-                    )}
+                    {r.carDistanceKm && <div>{r.carDistanceKm} км от города</div>}
                   </div>
                 </div>
 
-                <div style={{ fontSize: 13, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <span>
-                    ⛰ {r.runsCount ?? '?'} трасс, до{' '}
-                    {r.maxRunLengthM ? `${r.maxRunLengthM} м` : '?'}; перепад{' '}
-                    {r.verticalDropM ? `${r.verticalDropM} м` : '?'}
-                  </span>
+                <div style={{ fontSize: 13, color: '#111827' }}>
+                  ⛰ {r.runsCount ?? '?'} трасс, до{' '}
+                  {r.maxRunLengthM ? `${r.maxRunLengthM} м` : '?'}; перепад{' '}
+                  {r.verticalDropM ? `${r.verticalDropM} м` : '?'}
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12 }}>
@@ -319,7 +452,7 @@ export default function HomePage() {
                 </div>
 
                 {r.notes && (
-                  <div style={{ fontSize: 12, color: '#777' }}>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>
                     <b>Дорога:</b> {r.notes}
                   </div>
                 )}
@@ -332,6 +465,30 @@ export default function HomePage() {
   );
 }
 
+function FilterCheckbox(props: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        cursor: 'pointer',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={props.checked}
+        onChange={(e) => props.onChange(e.target.checked)}
+      />
+      <span>{props.label}</span>
+    </label>
+  );
+}
+
 function Tag(props: { active: boolean; children: React.ReactNode }) {
   return (
     <span
@@ -339,9 +496,9 @@ function Tag(props: { active: boolean; children: React.ReactNode }) {
         padding: '2px 8px',
         borderRadius: 999,
         border: '1px solid',
-        borderColor: props.active ? '#0a7' : '#ccc',
-        color: props.active ? '#0a7' : '#777',
-        background: props.active ? '#e6fff6' : '#f9f9f9',
+        borderColor: props.active ? '#16a34a' : '#d1d5db',
+        color: props.active ? '#166534' : '#4b5563',
+        background: props.active ? '#dcfce7' : '#f9fafb',
       }}
     >
       {props.children}
