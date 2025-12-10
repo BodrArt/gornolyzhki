@@ -36,7 +36,7 @@ export default function HomePage() {
   const [errorText, setErrorText] = useState<string | null>(null);
 
   // фильтры
-  const [maxHours, setMaxHours] = useState<number>(6);
+  const [maxHours, setMaxHours] = useState<number>(12); // по умолчанию 12, но можно двигать до 30
   const [onlyComfort, setOnlyComfort] = useState<boolean>(false);
   const [excludeDraglift, setExcludeDraglift] = useState<boolean>(false);
   const [kidsOnly, setKidsOnly] = useState<boolean>(false);
@@ -166,7 +166,7 @@ export default function HomePage() {
         maxWidth: '960px',
         margin: '0 auto',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-        color: '#0f172a', // тёмный текст
+        color: '#0f172a',
         backgroundColor: '#f9fafb',
         minHeight: '100vh',
       }}
@@ -267,7 +267,7 @@ export default function HomePage() {
               <input
                 type="range"
                 min={1}
-                max={12}
+                max={30} // было 12, теперь до 30 часов
                 step={1}
                 value={maxHours}
                 onChange={(e) => setMaxHours(Number(e.target.value))}
