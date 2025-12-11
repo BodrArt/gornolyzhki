@@ -9,10 +9,11 @@ import Link from "next/link";
 export default function Home() {
   const [resorts, setResorts] = useState<any[]>([]);
   const [cities, setCities] = useState<any[]>([]);
-  const [selectedCity, setSelectedCity] = useState<number | null>(5); // Москва по умолчанию
+  const [selectedCity, setSelectedCity] = useState<number | null>(5); // Москва
   const [maxHours, setMaxHours] = useState<number>(12);
   const [minRuns, setMinRuns] = useState<number>(0);
-  const [onlyComfortLifts, setOnlyComfortLifts] = useState(false); // кресла/кабинки
+  const [minRunLength, setMinRunLength] = useState<number>(0);
+  const [onlyComfortLifts, setOnlyComfortLifts] = useState(false);
   const [onlyKidsFriendly, setOnlyKidsFriendly] = useState(false);
   const [onlyNightSkiing, setOnlyNightSkiing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -50,6 +51,7 @@ export default function Home() {
             car_hours_min,
             car_hours_max,
             car_distance_km,
+            notes,
             cities ( id, name )
           )
         `
@@ -66,11 +68,9 @@ export default function Home() {
 
   const currentCity = cities.find((c) => c.id === selectedCity);
 
-  // Фильтрация по городу, времени и доп. условиям
+  // Фильтрация
   const filtered = resorts.filter((resort) => {
-    // 1) По городу и времени
-    let profileMatch = true;
-
+    // 1) По городу и времени в пути
     if (selectedCity !== null) {
       const profiles = resort.travel_profiles || [];
       const p = profiles.find(
@@ -79,28 +79,32 @@ export default function Home() {
           tp.car_hours_min != null &&
           tp.car_hours_min <= maxHours
       );
-      if (!p) profileMatch = false;
+      if (!p) return false;
     }
 
-    if (!profileMatch) return false;
-
-    // 2) По минимуму трасс
+    // 2) Минимум трасс
     if (minRuns > 0) {
       const runs = resort.runs_count ?? 0;
       if (runs < minRuns) return false;
     }
 
-    // 3) Только комфортные подъёмники (кресла/кабинки)
+    // 3) Минимальная длина самой длинной трассы (м)
+    if (minRunLength > 0) {
+      const longest = resort.max_run_length_m ?? 0;
+      if (longest < minRunLength) return false;
+    }
+
+    // 4) Только комфортные подъёмники
     if (onlyComfortLifts) {
       if (!(resort.has_chairlift || resort.has_gondola)) return false;
     }
 
-    // 4) Только «для детей»
+    // 5) Только для детей
     if (onlyKidsFriendly) {
       if (!resort.kids_friendly) return false;
     }
 
-    // 5) Только с вечерним катанием
+    // 6) Только с вечерним катанием
     if (onlyNightSkiing) {
       if (!resort.night_skiing) return false;
     }
@@ -115,23 +119,23 @@ export default function Home() {
         <h1 style={h1}>Горнолыжка на машине</h1>
 
         <p style={lead}>
-          Сервис для тех, кто планирует горнолыжку на машине из конкретного города, а не
-          «куда придётся».
+          Сервис для тех, кто планирует горнолыжку не «куда угодно», а с учётом города
+          выезда, времени в пути и качества катания.
         </p>
         <p style={lead2}>
-          Выберите город выезда, задайте максимум часов в дороге и условия катания — мы
-          покажем подходящие курорты.
+          Выберите город, задайте максимум часов за рулём и требования к курорту — мы
+          покажем, куда реально имеет смысл ехать.
         </p>
         <p style={lead3}>
           Сейчас поддерживаются <b>Москва</b>, <b>Нижний Новгород</b> и несколько крупных
-          городов. Базу постепенно дополняем.
+          городов. Базу городов и курортов постепенно расширяем.
         </p>
       </header>
 
       {/* Панель фильтров */}
       <section style={filtersWrapper}>
-        {/* Блок 1 — город */}
-        <div style={filterBlock}>
+        {/* Город выезда */}
+        <div style={filterBlockWide}>
           <label style={label}>Город выезда</label>
           <select
             style={select}
@@ -146,12 +150,12 @@ export default function Home() {
           </select>
           {currentCity && (
             <div style={hintText}>
-              Курорты показываются для выезда <b>из {currentCity.name}</b>.
+              Курорты рассчитаны для выезда <b>из {currentCity.name}</b>.
             </div>
           )}
         </div>
 
-        {/* Блок 2 — время в пути */}
+        {/* Время в пути */}
         <div style={filterBlock}>
           <label style={label}>Максимум времени в пути, часов</label>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -166,11 +170,11 @@ export default function Home() {
             <span style={sliderValue}>{maxHours}</span>
           </div>
           <div style={hintText}>
-            Используем минимальное оценочное время в дороге.
+            Берём минимальное оценочное время в дороге из города до курорта.
           </div>
         </div>
 
-        {/* Блок 3 — трассы */}
+        {/* Минимум трасс */}
         <div style={filterBlock}>
           <label style={label}>Минимум подготовленных трасс</label>
           <input
@@ -182,12 +186,28 @@ export default function Home() {
             style={numberInput}
           />
           <div style={hintText}>
-            Например, 5–10 трасс — уже небольшой, но осмысленный курорт.
+            Например, от 5–10 трасс — уже небольшой, но осмысленный курорт.
           </div>
         </div>
 
-        {/* Блок 4 — комфорт / дети / вечер */}
+        {/* Длина самой длинной трассы */}
         <div style={filterBlock}>
+          <label style={label}>Минимальная длина самой длинной трассы (м)</label>
+          <input
+            type="number"
+            min={0}
+            max={5000}
+            value={minRunLength}
+            onChange={(e) => setMinRunLength(Number(e.target.value) || 0)}
+            style={numberInput}
+          />
+          <div style={hintText}>
+            Для комфортного катания по одной линии — обычно от 800 до 1500 м и выше.
+          </div>
+        </div>
+
+        {/* Комфорт/дети/вечер */}
+        <div style={filterBlockFull}>
           <label style={label}>Комфорт и формат катания</label>
           <label style={checkboxRow}>
             <input
@@ -195,7 +215,7 @@ export default function Home() {
               checked={onlyComfortLifts}
               onChange={(e) => setOnlyComfortLifts(e.target.checked)}
             />
-            <span>Только с креслами / кабинками</span>
+            <span>Только с креслами или кабинками (без «швабр»)</span>
           </label>
           <label style={checkboxRow}>
             <input
@@ -233,7 +253,7 @@ export default function Home() {
         {loading ? null : filtered.length === 0 ? (
           <p style={{ color: "#6b7280", fontSize: 14 }}>
             Под такие условия пока ничего не нашлось. Попробуйте ослабить фильтры —
-            уменьшить требования к трассам или отключить часть галочек.
+            уменьшить требования к трассам или длине, либо отключить часть галочек.
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -269,6 +289,11 @@ export default function Home() {
                           )}
                         {profile.car_distance_km != null && (
                           <div>{profile.car_distance_km} км от города</div>
+                        )}
+                        {profile.notes && (
+                          <div style={{ fontSize: 12, color: "#6b7280" }}>
+                            {profile.notes}
+                          </div>
                         )}
                       </div>
                     )}
@@ -340,8 +365,8 @@ const lead3 = {
 };
 
 const filtersWrapper = {
-  display: "flex",
-  flexWrap: "wrap" as const,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 16,
   backgroundColor: "#f3f4f6",
   padding: 16,
@@ -354,8 +379,20 @@ const filterBlock = {
   display: "flex",
   flexDirection: "column" as const,
   gap: 6,
-  minWidth: 220,
-  flex: 1,
+};
+
+const filterBlockWide = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 6,
+  gridColumn: "1 / -1",
+};
+
+const filterBlockFull = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 4,
+  gridColumn: "1 / -1",
 };
 
 const label = {
@@ -393,7 +430,7 @@ const numberInput = {
   fontSize: 14,
   backgroundColor: "#ffffff",
   color: "#111827",
-  width: 100,
+  width: 120,
 };
 
 const checkboxRow = {
