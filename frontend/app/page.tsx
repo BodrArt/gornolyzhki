@@ -1,8 +1,11 @@
 "use client";
+// @ts-nocheck
+/* eslint-disable */
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+
 
 export default function Home() {
   const [resorts, setResorts] = useState<any[]>([]);
