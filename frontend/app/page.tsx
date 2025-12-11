@@ -11,6 +11,10 @@ export default function Home() {
   const [cities, setCities] = useState<any[]>([]);
   const [selectedCity, setSelectedCity] = useState<number | null>(5); // Москва по умолчанию
   const [maxHours, setMaxHours] = useState<number>(12);
+  const [minRuns, setMinRuns] = useState<number>(0);
+  const [onlyComfortLifts, setOnlyComfortLifts] = useState(false); // кресла/кабинки
+  const [onlyKidsFriendly, setOnlyKidsFriendly] = useState(false);
+  const [onlyNightSkiing, setOnlyNightSkiing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,20 +64,49 @@ export default function Home() {
     load();
   }, []);
 
-  // Фильтрация по выбранному городу и максимуму часов
-  const filtered =
-    selectedCity === null
-      ? resorts
-      : resorts.filter((resort) =>
-          resort.travel_profiles?.some(
-            (p: any) =>
-              p.cities?.id === selectedCity &&
-              p.car_hours_min != null &&
-              p.car_hours_min <= maxHours
-          )
-        );
-
   const currentCity = cities.find((c) => c.id === selectedCity);
+
+  // Фильтрация по городу, времени и доп. условиям
+  const filtered = resorts.filter((resort) => {
+    // 1) По городу и времени
+    let profileMatch = true;
+
+    if (selectedCity !== null) {
+      const profiles = resort.travel_profiles || [];
+      const p = profiles.find(
+        (tp: any) =>
+          tp.cities?.id === selectedCity &&
+          tp.car_hours_min != null &&
+          tp.car_hours_min <= maxHours
+      );
+      if (!p) profileMatch = false;
+    }
+
+    if (!profileMatch) return false;
+
+    // 2) По минимуму трасс
+    if (minRuns > 0) {
+      const runs = resort.runs_count ?? 0;
+      if (runs < minRuns) return false;
+    }
+
+    // 3) Только комфортные подъёмники (кресла/кабинки)
+    if (onlyComfortLifts) {
+      if (!(resort.has_chairlift || resort.has_gondola)) return false;
+    }
+
+    // 4) Только «для детей»
+    if (onlyKidsFriendly) {
+      if (!resort.kids_friendly) return false;
+    }
+
+    // 5) Только с вечерним катанием
+    if (onlyNightSkiing) {
+      if (!resort.night_skiing) return false;
+    }
+
+    return true;
+  });
 
   return (
     <main style={container}>
@@ -83,20 +116,21 @@ export default function Home() {
 
         <p style={lead}>
           Сервис для тех, кто планирует горнолыжку на машине из конкретного города, а не
-          «куда-нибудь».
+          «куда придётся».
         </p>
         <p style={lead2}>
-          Выберите город выезда, задайте максимум часов в дороге — мы покажем курорты, куда
-          есть смысл ехать.
+          Выберите город выезда, задайте максимум часов в дороге и условия катания — мы
+          покажем подходящие курорты.
         </p>
         <p style={lead3}>
-          Сейчас поддерживаются <b>Москва</b>, <b>Нижний Новгород</b> и ещё несколько
-          крупных городов. Базу постепенно дополняем.
+          Сейчас поддерживаются <b>Москва</b>, <b>Нижний Новгород</b> и несколько крупных
+          городов. Базу постепенно дополняем.
         </p>
       </header>
 
       {/* Панель фильтров */}
       <section style={filtersWrapper}>
+        {/* Блок 1 — город */}
         <div style={filterBlock}>
           <label style={label}>Город выезда</label>
           <select
@@ -112,13 +146,14 @@ export default function Home() {
           </select>
           {currentCity && (
             <div style={hintText}>
-              Показаны курорты, куда можно доехать <b>из {currentCity.name}</b>.
+              Курорты показываются для выезда <b>из {currentCity.name}</b>.
             </div>
           )}
         </div>
 
+        {/* Блок 2 — время в пути */}
         <div style={filterBlock}>
-          <label style={label}>Максимум времени в пути, ч</label>
+          <label style={label}>Максимум времени в пути, часов</label>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input
               type="range"
@@ -131,12 +166,57 @@ export default function Home() {
             <span style={sliderValue}>{maxHours}</span>
           </div>
           <div style={hintText}>
-            Оцениваем дорогу как <b>нижнюю границу</b> времени (минимум часов в пути).
+            Используем минимальное оценочное время в дороге.
           </div>
+        </div>
+
+        {/* Блок 3 — трассы */}
+        <div style={filterBlock}>
+          <label style={label}>Минимум подготовленных трасс</label>
+          <input
+            type="number"
+            min={0}
+            max={50}
+            value={minRuns}
+            onChange={(e) => setMinRuns(Number(e.target.value) || 0)}
+            style={numberInput}
+          />
+          <div style={hintText}>
+            Например, 5–10 трасс — уже небольшой, но осмысленный курорт.
+          </div>
+        </div>
+
+        {/* Блок 4 — комфорт / дети / вечер */}
+        <div style={filterBlock}>
+          <label style={label}>Комфорт и формат катания</label>
+          <label style={checkboxRow}>
+            <input
+              type="checkbox"
+              checked={onlyComfortLifts}
+              onChange={(e) => setOnlyComfortLifts(e.target.checked)}
+            />
+            <span>Только с креслами / кабинками</span>
+          </label>
+          <label style={checkboxRow}>
+            <input
+              type="checkbox"
+              checked={onlyKidsFriendly}
+              onChange={(e) => setOnlyKidsFriendly(e.target.checked)}
+            />
+            <span>Подходит для катания с детьми</span>
+          </label>
+          <label style={checkboxRow}>
+            <input
+              type="checkbox"
+              checked={onlyNightSkiing}
+              onChange={(e) => setOnlyNightSkiing(e.target.checked)}
+            />
+            <span>Есть вечернее катание</span>
+          </label>
         </div>
       </section>
 
-      {/* Итоговая строка */}
+      {/* Статистика по результатам */}
       <section style={{ marginTop: 16 }}>
         {loading ? (
           <p style={{ color: "#4b5563" }}>Загружаем курорты…</p>
@@ -152,18 +232,19 @@ export default function Home() {
       <section style={{ marginTop: 12 }}>
         {loading ? null : filtered.length === 0 ? (
           <p style={{ color: "#6b7280", fontSize: 14 }}>
-            Для этого города и выбранного лимита по времени пока нет курортов
-            (или они не попадают под фильтр). Попробуйте увеличить максимум часов или
-            выбрать другой город.
+            Под такие условия пока ничего не нашлось. Попробуйте ослабить фильтры —
+            уменьшить требования к трассам или отключить часть галочек.
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {filtered.map((resort) => {
-              // находим профиль для текущего города
+              const profiles = resort.travel_profiles || [];
               const profile =
-                resort.travel_profiles?.find(
-                  (p: any) => p.cities?.id === selectedCity
-                ) ?? null;
+                selectedCity === null
+                  ? null
+                  : profiles.find(
+                      (p: any) => p.cities?.id === selectedCity
+                    ) ?? null;
 
               return (
                 <Link
@@ -260,7 +341,7 @@ const lead3 = {
 
 const filtersWrapper = {
   display: "flex",
-  flexWrap: "wrap",
+  flexWrap: "wrap" as const,
   gap: 16,
   backgroundColor: "#f3f4f6",
   padding: 16,
@@ -273,7 +354,7 @@ const filterBlock = {
   display: "flex",
   flexDirection: "column" as const,
   gap: 6,
-  minWidth: 260,
+  minWidth: 220,
   flex: 1,
 };
 
@@ -303,6 +384,24 @@ const sliderValue = {
   fontVariantNumeric: "tabular-nums" as const,
   color: "#111827",
   fontWeight: 600,
+};
+
+const numberInput = {
+  padding: "6px 8px",
+  borderRadius: 8,
+  border: "1px solid #d1d5db",
+  fontSize: 14,
+  backgroundColor: "#ffffff",
+  color: "#111827",
+  width: 100,
+};
+
+const checkboxRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 13,
+  color: "#111827",
 };
 
 const card = {
