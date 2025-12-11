@@ -1,6 +1,6 @@
-"use client";
 // @ts-nocheck
 /* eslint-disable */
+"use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
